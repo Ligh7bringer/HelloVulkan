@@ -2,10 +2,10 @@
 Language:        Cpp
 # BasedOnStyle:  WebKit
 AccessModifierOffset: -4
-AlignAfterOpenBracket: DontAlign
-AlignConsecutiveMacros: false
-AlignConsecutiveAssignments: false
-AlignConsecutiveDeclarations: false
+AlignAfterOpenBracket: AlwaysBreak
+AlignConsecutiveMacros: true
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
 AlignEscapedNewlines: Right
 AlignOperands:   false
 AlignTrailingComments: false
@@ -23,7 +23,7 @@ AlwaysBreakAfterReturnType: None
 AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: MultiLine
 BinPackArguments: true
-BinPackParameters: true
+BinPackParameters: false
 BreakBeforeBraces: Custom
 BraceWrapping: 
   AfterCaseLabel:  false
@@ -50,7 +50,7 @@ BreakConstructorInitializersBeforeComma: false
 BreakConstructorInitializers: BeforeComma
 BreakAfterJavaFieldAnnotations: false
 BreakStringLiterals: true
-ColumnLimit:     0
+ColumnLimit:     120
 CommentPragmas:  '^ IWYU pragma:'
 CompactNamespaces: false
 ConstructorInitializerAllOnOneLineOrOnePerLine: false

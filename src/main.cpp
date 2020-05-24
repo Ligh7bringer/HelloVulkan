@@ -135,16 +135,11 @@ private:
         std::vector<VkPhysicalDevice> devices(deviceCount);
         vkEnumeratePhysicalDevices(instance_, &deviceCount, devices.data());
 
-        for (const auto& device : devices) {
-            if (isDeviceSuitable(device)) {
-                physicalDevice_ = device;
-                break;
-            }
+        auto result = std::find_if(
+            devices.begin(), devices.end(), [&](VkPhysicalDevice dev) -> bool { return isDeviceSuitable(dev); });
+        if (result != std::end(devices)) {
+            physicalDevice_ = *result;
         }
-
-        // FIXME: Use find_if:
-        // std::find_if(
-        //     devices.begin(), devices.end(), [&](VkPhysicalDevice dev) -> bool { return isDeviceSuitable(dev); });
 
         if (physicalDevice_ == VK_NULL_HANDLE) {
             throw std::runtime_error("failed to find a suitable GPU!");

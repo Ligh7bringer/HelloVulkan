@@ -64,6 +64,26 @@ private:
         createSwapChain();
     }
 
+    void mainLoop() {
+        while (!glfwWindowShouldClose(window_)) {
+            glfwPollEvents();
+        }
+    }
+
+    void cleanup() {
+        if (enableValidationLayers) {
+            DestroyDebugUtilsMessengerEXT(instance_, debugMessenger_, nullptr);
+        }
+        vkDestroySwapchainKHR(device_, swapChain_, nullptr);
+        vkDestroyDevice(device_, nullptr);
+        vkDestroySurfaceKHR(instance_, surface_, nullptr);
+        vkDestroyInstance(instance_, nullptr);
+
+        glfwDestroyWindow(window_);
+        glfwTerminate();
+    }
+
+    /*---------------- Vulkan setup functions ----------------*/
     void createInstance() {
         if (enableValidationLayers && !checkValidationLayerSupport()) {
             throw std::runtime_error("validation layers requested, but not available!");
@@ -106,23 +126,23 @@ private:
         }
     }
 
-    void mainLoop() {
-        while (!glfwWindowShouldClose(window_)) {
-            glfwPollEvents();
+    void setupDebugMessenger() {
+        if (!enableValidationLayers)
+            return;
+
+        VkDebugUtilsMessengerCreateInfoEXT createInfo;
+        populateDebugMessengerCreateInfo(createInfo);
+
+        if (CreateDebugUtilsMessengerEXT(instance_, &createInfo, nullptr, &debugMessenger_)
+            != VK_SUCCESS) {
+            throw std::runtime_error("failed to set up debug messenger!");
         }
     }
 
-    void cleanup() {
-        if (enableValidationLayers) {
-            DestroyDebugUtilsMessengerEXT(instance_, debugMessenger_, nullptr);
+    void createSurface() {
+        if (glfwCreateWindowSurface(instance_, window_, nullptr, &surface_) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create window surface!");
         }
-        vkDestroySwapchainKHR(device_, swapChain_, nullptr);
-        vkDestroyDevice(device_, nullptr);
-        vkDestroySurfaceKHR(instance_, surface_, nullptr);
-        vkDestroyInstance(instance_, nullptr);
-
-        glfwDestroyWindow(window_);
-        glfwTerminate();
     }
 
     void pickPhysicalDevice() {
@@ -146,26 +166,6 @@ private:
         if (physicalDevice_ == VK_NULL_HANDLE) {
             throw std::runtime_error("failed to find a suitable GPU!");
         }
-    }
-
-    int isDeviceSuitable(VkPhysicalDevice device) {
-        // Check support for graphics & presentation queues
-        QueueFamilyIndices indices = findQueueFamilies(device);
-
-        // Check support for swap chain extension
-        const bool extensionsSupported = checkDeviceExtensionSupport(device);
-
-        bool swapChainAdequate = false;
-        // Note: swap chain can be only queried if the extension is supported
-        if (extensionsSupported) {
-            SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
-            // Make sure swap chain suppots at least one image format and present mode
-            swapChainAdequate
-                = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
-        }
-
-        // Check if device supports required queue families
-        return indices.isComplete() && extensionsSupported && swapChainAdequate;
     }
 
     void createLogicalDevice() {
@@ -269,6 +269,26 @@ private:
     }
 
     /*---------------- Helper functions ----------------*/
+    int isDeviceSuitable(VkPhysicalDevice device) {
+        // Check support for graphics & presentation queues
+        QueueFamilyIndices indices = findQueueFamilies(device);
+
+        // Check support for swap chain extension
+        const bool extensionsSupported = checkDeviceExtensionSupport(device);
+
+        bool swapChainAdequate = false;
+        // Note: swap chain can be only queried if the extension is supported
+        if (extensionsSupported) {
+            SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+            // Make sure swap chain suppots at least one image format and present mode
+            swapChainAdequate
+                = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+        }
+
+        // Check if device supports required queue families
+        return indices.isComplete() && extensionsSupported && swapChainAdequate;
+    }
+
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
         QueueFamilyIndices indices;
 
@@ -298,25 +318,6 @@ private:
         }
 
         return indices;
-    }
-
-    void setupDebugMessenger() {
-        if (!enableValidationLayers)
-            return;
-
-        VkDebugUtilsMessengerCreateInfoEXT createInfo;
-        populateDebugMessengerCreateInfo(createInfo);
-
-        if (CreateDebugUtilsMessengerEXT(instance_, &createInfo, nullptr, &debugMessenger_)
-            != VK_SUCCESS) {
-            throw std::runtime_error("failed to set up debug messenger!");
-        }
-    }
-
-    void createSurface() {
-        if (glfwCreateWindowSurface(instance_, window_, nullptr, &surface_) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create window surface!");
-        }
     }
 
     bool checkValidationLayerSupport() {

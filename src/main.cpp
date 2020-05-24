@@ -6,13 +6,15 @@
 #include <iostream>
 #include <map>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <vector>
 
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
+    std::optional<uint32_t> presentFamily;
 
-    bool isComplete() const { return graphicsFamily.has_value(); }
+    bool isComplete() const { return graphicsFamily.has_value() && presentFamily.has_value(); }
 };
 
 #define SHOW_SUPPORTED_EXTENSIONS 0
@@ -34,7 +36,8 @@ VkResult CreateDebugUtilsMessengerEXT(
     const VkAllocationCallbacks*              pAllocator,
     VkDebugUtilsMessengerEXT*                 pDebugMessenger) {
 
-    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+        instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr) {
         return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
     }
@@ -43,8 +46,11 @@ VkResult CreateDebugUtilsMessengerEXT(
 }
 
 void DestroyDebugUtilsMessengerEXT(
-    VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {
-    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    VkInstance                   instance,
+    VkDebugUtilsMessengerEXT     debugMessenger,
+    const VkAllocationCallbacks* pAllocator) {
+    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+        instance, "vkDestroyDebugUtilsMessengerEXT");
 
     if (func != nullptr) {
         func(instance, debugMessenger, pAllocator);
@@ -55,9 +61,10 @@ class HelloTriangleApplication {
     GLFWwindow*              window_;
     VkInstance               instance_;
     VkDebugUtilsMessengerEXT debugMessenger_;
+    VkSurfaceKHR             surface_;
     VkPhysicalDevice         physicalDevice_ = VK_NULL_HANDLE;
     VkDevice                 device_;
-    VkQueue                  graphicsQueue_;
+    VkQueue                  graphicsQueue_, presentQueue_;
 
 public:
     void run() {
@@ -82,6 +89,7 @@ private:
     void initVulkan() {
         createInstance();
         setupDebugMessenger();
+        createSurface();
         pickPhysicalDevice();
         createLogicalDevice();
     }
@@ -139,6 +147,7 @@ private:
             DestroyDebugUtilsMessengerEXT(instance_, debugMessenger_, nullptr);
         }
         vkDestroyDevice(device_, nullptr);
+        vkDestroySurfaceKHR(instance_, surface_, nullptr);
         vkDestroyInstance(instance_, nullptr);
 
         glfwDestroyWindow(window_);
@@ -155,8 +164,10 @@ private:
         std::vector<VkPhysicalDevice> devices(deviceCount);
         vkEnumeratePhysicalDevices(instance_, &deviceCount, devices.data());
 
-        auto result = std::find_if(
-            devices.begin(), devices.end(), [&](VkPhysicalDevice dev) -> bool { return isDeviceSuitable(dev); });
+        auto result
+            = std::find_if(devices.begin(), devices.end(), [&](VkPhysicalDevice dev) -> bool {
+                  return isDeviceSuitable(dev);
+              });
         if (result != std::end(devices)) {
             physicalDevice_ = *result;
         }
@@ -176,27 +187,33 @@ private:
     void createLogicalDevice() {
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice_);
 
-        const float    queuePriority = 1.f;
-        const uint32_t queueCount    = 1;
-        // Setup graphics queue
-        VkDeviceQueueCreateInfo queueCreateInfo {};
-        queueCreateInfo.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
-        queueCreateInfo.queueCount       = queueCount;
-        queueCreateInfo.pQueuePriorities = &queuePriority;
+        std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+        std::set<uint32_t>                   uniqueQueueFamilies
+            = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+
+        float queuePriority = 1.0f;
+        for (uint32_t queueFamily : uniqueQueueFamilies) {
+            VkDeviceQueueCreateInfo queueCreateInfo {};
+            queueCreateInfo.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queueCreateInfo.queueFamilyIndex = queueFamily;
+            queueCreateInfo.queueCount       = 1;
+            queueCreateInfo.pQueuePriorities = &queuePriority;
+            queueCreateInfos.push_back(queueCreateInfo);
+        }
 
         VkPhysicalDeviceFeatures deviceFeatures {};
 
-        // Setup logical device
-        VkDeviceCreateInfo createInfo;
-        createInfo.sType                 = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        createInfo.pQueueCreateInfos     = &queueCreateInfo;
-        createInfo.queueCreateInfoCount  = queueCount;
-        createInfo.pEnabledFeatures      = &deviceFeatures;
+        VkDeviceCreateInfo createInfo {};
+        createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+
+        createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
+        createInfo.pQueueCreateInfos    = queueCreateInfos.data();
+
+        createInfo.pEnabledFeatures = &deviceFeatures;
+
         createInfo.enabledExtensionCount = 0;
 
         if (enableValidationLayers) {
-            // Note: this is not needed anymore, but it is a good idea to set it to be backwards-compatible
             createInfo.enabledLayerCount   = static_cast<uint32_t>(validationLayers.size());
             createInfo.ppEnabledLayerNames = validationLayers.data();
         } else {
@@ -204,10 +221,13 @@ private:
         }
 
         if (vkCreateDevice(physicalDevice_, &createInfo, nullptr, &device_) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create logical device!");
+            throw std::runtime_error("failed to create logical device!");
         }
 
+        // Get handle to graphics queue
         vkGetDeviceQueue(device_, indices.graphicsFamily.value(), 0, &graphicsQueue_);
+        // Get handle to presentation queue
+        vkGetDeviceQueue(device_, indices.presentFamily.value(), 0, &presentQueue_);
     }
 
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
@@ -225,9 +245,14 @@ private:
             if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
                 indices.graphicsFamily = i;
             }
-
             if (indices.isComplete()) {
                 break;
+            }
+
+            VkBool32 presentSupport = false;
+            vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface_, &presentSupport);
+            if (presentSupport) {
+                indices.presentFamily = i;
             }
 
             i++;
@@ -243,8 +268,15 @@ private:
         VkDebugUtilsMessengerCreateInfoEXT createInfo;
         populateDebugMessengerCreateInfo(createInfo);
 
-        if (CreateDebugUtilsMessengerEXT(instance_, &createInfo, nullptr, &debugMessenger_) != VK_SUCCESS) {
+        if (CreateDebugUtilsMessengerEXT(instance_, &createInfo, nullptr, &debugMessenger_)
+            != VK_SUCCESS) {
             throw std::runtime_error("failed to set up debug messenger!");
+        }
+    }
+
+    void createSurface() {
+        if (glfwCreateWindowSurface(instance_, window_, nullptr, &surface_) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create window surface!");
         }
     }
 
@@ -291,10 +323,11 @@ private:
         createInfo       = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
         /*VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT| */
-        createInfo.messageSeverity
-            = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+        createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+            | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
         createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
-            | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+            | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
+            | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
         createInfo.pfnUserCallback = debugCallback;
     }
 

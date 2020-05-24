@@ -34,6 +34,9 @@ class HelloTriangleApplication {
     VkDevice                 device_;
     VkQueue                  graphicsQueue_, presentQueue_;
     VkSwapchainKHR           swapChain_;
+    std::vector<VkImage>     swapChainImages_;
+    VkFormat                 swapChainImageFormat_;
+    VkExtent2D               swapChainExtent_;
 
 public:
     void run() {
@@ -266,6 +269,15 @@ private:
         if (vkCreateSwapchainKHR(device_, &createInfo, nullptr, &swapChain_) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create swap chain!");
         }
+
+        // Get swap chain images
+        vkGetSwapchainImagesKHR(device_, swapChain_, &imageCount, nullptr);
+        swapChainImages_.resize(imageCount);
+        vkGetSwapchainImagesKHR(device_, swapChain_, &imageCount, swapChainImages_.data());
+        std::cout << "Swap chain: Using " << imageCount << " images...\n";
+
+        swapChainImageFormat_ = surfaceFormat.format;
+        swapChainExtent_      = extent;
     }
 
     /*---------------- Helper functions ----------------*/

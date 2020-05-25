@@ -67,6 +67,7 @@ private:
         createLogicalDevice();
         createSwapChain();
         createImageViews();
+        createGraphicsPipeline();
     }
 
     void mainLoop() {
@@ -314,6 +315,36 @@ private:
         }
     }
 
+    void createGraphicsPipeline() {
+        auto vertShaderCode = readFile("shaders/vert.spv");
+        auto fragShaderCode = readFile("shaders/frag.spv");
+
+        VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+        VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+        // Vertex shader stage
+        VkPipelineShaderStageCreateInfo vertShaderStageInfo {};
+        vertShaderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        vertShaderStageInfo.stage  = VK_SHADER_STAGE_VERTEX_BIT;
+        vertShaderStageInfo.module = vertShaderModule;
+        vertShaderStageInfo.pName  = "main"; // Shader entrypoint - main()
+
+        // Fragment shader stage
+        VkPipelineShaderStageCreateInfo fragShaderStageInfo {};
+        fragShaderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        fragShaderStageInfo.stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+        fragShaderStageInfo.module = fragShaderModule;
+        fragShaderStageInfo.pName  = "main"; // Shader entrypoint - main()
+
+        VkPipelineShaderStageCreateInfo shaderStages[]
+            = { vertShaderStageInfo, fragShaderStageInfo };
+
+        // Create pipeline...
+
+        vkDestroyShaderModule(device_, fragShaderModule, nullptr);
+        vkDestroyShaderModule(device_, vertShaderModule, nullptr);
+    }
+
     /*---------------- Helper functions ----------------*/
     int isDeviceSuitable(VkPhysicalDevice device) {
         // Check support for graphics & presentation queues
@@ -486,6 +517,22 @@ private:
         std::cout << "Swap chain: Using " << actualExtent.height << " x " << actualExtent.width
                   << " for resulution\n";
         return actualExtent;
+    }
+
+    VkShaderModule createShaderModule(const std::vector<char>& code) {
+        VkShaderModuleCreateInfo createInfo {};
+        createInfo.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        createInfo.codeSize = code.size();
+        createInfo.pCode    = reinterpret_cast<const uint32_t*>(code.data());
+        // Note: The cast above is fine since std::vector ensures the data satisfies the alignment
+        // requirements of uint32_t
+
+        VkShaderModule shaderModule;
+        if (vkCreateShaderModule(device_, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create shader module!");
+        }
+
+        return shaderModule;
     }
 
     std::vector<const char*> getRequiredExtensions() {

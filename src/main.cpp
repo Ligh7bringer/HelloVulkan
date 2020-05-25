@@ -38,6 +38,7 @@ class HelloTriangleApplication {
     VkFormat                 swapChainImageFormat_;
     VkExtent2D               swapChainExtent_;
     std::vector<VkImageView> swapChainImageViews_;
+    VkRenderPass             renderPass_;
     VkPipelineLayout         pipelineLayout_;
 
 public:
@@ -68,6 +69,7 @@ private:
         createLogicalDevice();
         createSwapChain();
         createImageViews();
+        createRenderPass();
         createGraphicsPipeline();
     }
 
@@ -86,6 +88,7 @@ private:
             vkDestroyImageView(device_, imageView, nullptr);
         }
 
+        vkDestroyRenderPass(device_, renderPass_, nullptr);
         vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
         vkDestroySwapchainKHR(device_, swapChain_, nullptr);
         vkDestroyDevice(device_, nullptr);
@@ -301,6 +304,41 @@ private:
 
             VK_SAFE(vkCreateImageView(device_, &createInfo, nullptr, &swapChainImageViews_[i]));
         }
+    }
+
+    void createRenderPass() {
+        VkAttachmentDescription colorAttachment {};
+        colorAttachment.format  = swapChainImageFormat_;
+        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        // What to do with the data before and after rendering
+        colorAttachment.loadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        // We are not doing anything with the stencil buffer - ignore the data
+        colorAttachment.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAttachment.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+        colorAttachment.finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+        VkAttachmentReference colorAttachmentRef {};
+        // Index of the attachment in the attachments array - 0 since we only have 1
+        colorAttachmentRef.attachment = 0;
+        colorAttachmentRef.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        VkSubpassDescription subpass {};
+        subpass.pipelineBindPoint    = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = 1;
+        // This will bind the attachment to the shader. It may be referenced with
+        // layout(location = 0) out vec4 outColor
+        subpass.pColorAttachments = &colorAttachmentRef;
+
+        VkRenderPassCreateInfo renderPassInfo {};
+        renderPassInfo.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        renderPassInfo.attachmentCount = 1;
+        renderPassInfo.pAttachments    = &colorAttachment;
+        renderPassInfo.subpassCount    = 1;
+        renderPassInfo.pSubpasses      = &subpass;
+
+        VK_SAFE(vkCreateRenderPass(device_, &renderPassInfo, nullptr, &renderPass_));
     }
 
     void createGraphicsPipeline() {

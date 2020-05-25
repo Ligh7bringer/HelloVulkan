@@ -40,6 +40,7 @@ class HelloTriangleApplication {
     std::vector<VkImageView> swapChainImageViews_;
     VkRenderPass             renderPass_;
     VkPipelineLayout         pipelineLayout_;
+    VkPipeline               graphicsPipeline_;
 
 public:
     void run() {
@@ -89,6 +90,7 @@ private:
         }
 
         vkDestroyRenderPass(device_, renderPass_, nullptr);
+        vkDestroyPipeline(device_, graphicsPipeline_, nullptr);
         vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
         vkDestroySwapchainKHR(device_, swapChain_, nullptr);
         vkDestroyDevice(device_, nullptr);
@@ -459,7 +461,27 @@ private:
 
         VK_SAFE(vkCreatePipelineLayout(device_, &pipelineLayoutInfo, nullptr, &pipelineLayout_));
 
-        // Create pipeline...
+        // Create pipeline
+        VkGraphicsPipelineCreateInfo pipelineInfo {};
+        pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount          = 2;
+        pipelineInfo.pStages             = shaderStages;
+        pipelineInfo.pVertexInputState   = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState      = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState   = &multisampling;
+        pipelineInfo.pDepthStencilState  = nullptr; // Optional - not used
+        pipelineInfo.pColorBlendState    = &colorBlending;
+        pipelineInfo.pDynamicState       = nullptr; // Optional - not used
+        pipelineInfo.layout              = pipelineLayout_;
+        pipelineInfo.renderPass          = renderPass_;
+        pipelineInfo.subpass             = 0; // Index of the subpass
+        pipelineInfo.basePipelineHandle  = VK_NULL_HANDLE; // Optional
+        pipelineInfo.basePipelineIndex   = -1; // Optional
+
+        VK_SAFE(vkCreateGraphicsPipelines(
+            device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline_));
 
         vkDestroyShaderModule(device_, fragShaderModule, nullptr);
         vkDestroyShaderModule(device_, vertShaderModule, nullptr);

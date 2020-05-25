@@ -20,3 +20,18 @@ target_include_directories(
                          ${Vulkan_INCLUDE_DIRS})
 target_compile_definitions(hello_triangle PRIVATE GLFW_INCLUDE_VULKAN)
 target_compile_features(hello_triangle PRIVATE cxx_std_17)
+
+add_custom_target(
+  prepare_shaders
+  # Copy shaders to build directory
+  COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_SOURCE_DIR}/shaders
+          ${CMAKE_BINARY_DIR}/shaders
+  # Compile shaders
+  COMMAND glslc ${CMAKE_BINARY_DIR}/shaders/triangle.vert -o
+          ${CMAKE_BINARY_DIR}/shaders/vert.spv
+  COMMAND glslc ${CMAKE_BINARY_DIR}/shaders/triangle.frag -o
+          ${CMAKE_BINARY_DIR}/shaders/frag.spv
+  COMMENT "Compiling shaders..."
+  USES_TERMINAL VERBATIM)
+
+add_dependencies(hello_triangle prepare_shaders)

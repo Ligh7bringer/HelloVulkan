@@ -132,9 +132,7 @@ private:
             createInfo.pNext             = nullptr;
         }
 
-        if (vkCreateInstance(&createInfo, nullptr, &instance_) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create Vulkan instance!");
-        }
+        VK_SAFE(vkCreateInstance(&createInfo, nullptr, &instance_));
     }
 
     void setupDebugMessenger() {
@@ -144,16 +142,11 @@ private:
         VkDebugUtilsMessengerCreateInfoEXT createInfo;
         populateDebugMessengerCreateInfo(createInfo);
 
-        if (CreateDebugUtilsMessengerEXT(instance_, &createInfo, nullptr, &debugMessenger_)
-            != VK_SUCCESS) {
-            throw std::runtime_error("failed to set up debug messenger!");
-        }
+        VK_SAFE(CreateDebugUtilsMessengerEXT(instance_, &createInfo, nullptr, &debugMessenger_));
     }
 
     void createSurface() {
-        if (glfwCreateWindowSurface(instance_, window_, nullptr, &surface_) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create window surface!");
-        }
+        VK_SAFE(glfwCreateWindowSurface(instance_, window_, nullptr, &surface_));
     }
 
     void pickPhysicalDevice() {
@@ -213,9 +206,7 @@ private:
             createInfo.enabledLayerCount = 0;
         }
 
-        if (vkCreateDevice(physicalDevice_, &createInfo, nullptr, &device_) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create logical device!");
-        }
+        VK_SAFE(vkCreateDevice(physicalDevice_, &createInfo, nullptr, &device_));
 
         // Get handle to graphics queue
         vkGetDeviceQueue(device_, indices.graphicsFamily.value(), 0, &graphicsQueue_);
@@ -274,9 +265,7 @@ private:
         createInfo.clipped        = VK_TRUE;
         createInfo.oldSwapchain   = VK_NULL_HANDLE;
 
-        if (vkCreateSwapchainKHR(device_, &createInfo, nullptr, &swapChain_) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create swap chain!");
-        }
+        VK_SAFE(vkCreateSwapchainKHR(device_, &createInfo, nullptr, &swapChain_));
 
         // Get swap chain images
         vkGetSwapchainImagesKHR(device_, swapChain_, &imageCount, nullptr);
@@ -308,10 +297,7 @@ private:
             createInfo.subresourceRange.baseArrayLayer = 0;
             createInfo.subresourceRange.layerCount     = 1;
 
-            if (vkCreateImageView(device_, &createInfo, nullptr, &swapChainImageViews_[i])
-                != VK_SUCCESS) {
-                throw std::runtime_error("Failed to create image views!");
-            }
+            VK_SAFE(vkCreateImageView(device_, &createInfo, nullptr, &swapChainImageViews_[i]));
         }
     }
 
@@ -528,9 +514,7 @@ private:
         // requirements of uint32_t
 
         VkShaderModule shaderModule;
-        if (vkCreateShaderModule(device_, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create shader module!");
-        }
+        VK_SAFE(vkCreateShaderModule(device_, &createInfo, nullptr, &shaderModule));
 
         return shaderModule;
     }

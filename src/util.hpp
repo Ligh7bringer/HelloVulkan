@@ -5,7 +5,20 @@
 
 #include <fstream>
 #include <optional>
+#include <stdexcept>
 #include <vector>
+
+#define VK_SAFE(FUNC)                                                                              \
+    do {                                                                                           \
+        auto err = (FUNC);                                                                         \
+        if (err != VK_SUCCESS) {                                                                   \
+            std::string err_msg("@@@ Vulkan error in file ");                                      \
+            err_msg += __FILE__;                                                                   \
+            err_msg += " on line ";                                                                \
+            err_msg += std::to_string(__LINE__);                                                   \
+            throw std::runtime_error(err_msg);                                                     \
+        }                                                                                          \
+    } while (0)
 
 inline VkResult CreateDebugUtilsMessengerEXT(
     VkInstance                                instance,

@@ -3,6 +3,7 @@
 
 #include <GLFW/glfw3.h>
 
+#include <fstream>
 #include <optional>
 #include <vector>
 
@@ -45,5 +46,21 @@ struct SwapChainSupportDetails {
     std::vector<VkSurfaceFormatKHR> formats;
     std::vector<VkPresentModeKHR>   presentModes;
 };
+
+inline std::vector<char> readFile(const std::string& filename) {
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open file!");
+    }
+
+    std::size_t       fileSize = (std::size_t)file.tellg();
+    std::vector<char> buffer(fileSize);
+    file.seekg(0);
+    file.read(buffer.data(), fileSize);
+    file.close();
+
+    return buffer;
+}
 
 #endif // __UTIL_HPP__

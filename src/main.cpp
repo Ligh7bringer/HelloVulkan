@@ -26,21 +26,22 @@ const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation
 const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
 class HelloTriangleApplication {
-    GLFWwindow*              window_;
-    VkInstance               instance_;
-    VkDebugUtilsMessengerEXT debugMessenger_;
-    VkSurfaceKHR             surface_;
-    VkPhysicalDevice         physicalDevice_ = VK_NULL_HANDLE;
-    VkDevice                 device_;
-    VkQueue                  graphicsQueue_, presentQueue_;
-    VkSwapchainKHR           swapChain_;
-    std::vector<VkImage>     swapChainImages_;
-    VkFormat                 swapChainImageFormat_;
-    VkExtent2D               swapChainExtent_;
-    std::vector<VkImageView> swapChainImageViews_;
-    VkRenderPass             renderPass_;
-    VkPipelineLayout         pipelineLayout_;
-    VkPipeline               graphicsPipeline_;
+    GLFWwindow*                window_;
+    VkInstance                 instance_;
+    VkDebugUtilsMessengerEXT   debugMessenger_;
+    VkSurfaceKHR               surface_;
+    VkPhysicalDevice           physicalDevice_ = VK_NULL_HANDLE;
+    VkDevice                   device_;
+    VkQueue                    graphicsQueue_, presentQueue_;
+    VkSwapchainKHR             swapChain_;
+    std::vector<VkImage>       swapChainImages_;
+    VkFormat                   swapChainImageFormat_;
+    VkExtent2D                 swapChainExtent_;
+    std::vector<VkImageView>   swapChainImageViews_;
+    VkRenderPass               renderPass_;
+    VkPipelineLayout           pipelineLayout_;
+    VkPipeline                 graphicsPipeline_;
+    std::vector<VkFramebuffer> swapChainFramebuffers_;
 
 public:
     void run() {
@@ -72,6 +73,7 @@ private:
         createImageViews();
         createRenderPass();
         createGraphicsPipeline();
+        createFrameBuffers();
     }
 
     void mainLoop() {
@@ -87,6 +89,10 @@ private:
 
         for (auto imageView : swapChainImageViews_) {
             vkDestroyImageView(device_, imageView, nullptr);
+        }
+
+        for (auto framebuffer : swapChainFramebuffers_) {
+            vkDestroyFramebuffer(device_, framebuffer, nullptr);
         }
 
         vkDestroyRenderPass(device_, renderPass_, nullptr);
@@ -485,6 +491,26 @@ private:
 
         vkDestroyShaderModule(device_, fragShaderModule, nullptr);
         vkDestroyShaderModule(device_, vertShaderModule, nullptr);
+    }
+
+    void createFrameBuffers() {
+        swapChainFramebuffers_.resize(swapChainImageViews_.size());
+
+        for (std::size_t i = 0; i < swapChainImageViews_.size(); ++i) {
+            VkImageView attachments[] = { swapChainImageViews_[i] };
+
+            VkFramebufferCreateInfo framebufferInfo {};
+            framebufferInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            framebufferInfo.renderPass      = renderPass_;
+            framebufferInfo.attachmentCount = 1;
+            framebufferInfo.pAttachments    = attachments;
+            framebufferInfo.width           = swapChainExtent_.width;
+            framebufferInfo.height          = framebufferInfo.height;
+            framebufferInfo.layers          = 1;
+
+            VK_SAFE(vkCreateFramebuffer(
+                device_, &framebufferInfo, nullptr, &swapChainFramebuffers_[i]));
+        }
     }
 
     /*---------------- Helper functions ----------------*/

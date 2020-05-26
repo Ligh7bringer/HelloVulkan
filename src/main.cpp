@@ -26,22 +26,24 @@ const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation
 const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
 class HelloTriangleApplication {
-    GLFWwindow*                window_;
-    VkInstance                 instance_;
-    VkDebugUtilsMessengerEXT   debugMessenger_;
-    VkSurfaceKHR               surface_;
-    VkPhysicalDevice           physicalDevice_ = VK_NULL_HANDLE;
-    VkDevice                   device_;
-    VkQueue                    graphicsQueue_, presentQueue_;
-    VkSwapchainKHR             swapChain_;
-    std::vector<VkImage>       swapChainImages_;
-    VkFormat                   swapChainImageFormat_;
-    VkExtent2D                 swapChainExtent_;
-    std::vector<VkImageView>   swapChainImageViews_;
-    VkRenderPass               renderPass_;
-    VkPipelineLayout           pipelineLayout_;
-    VkPipeline                 graphicsPipeline_;
-    std::vector<VkFramebuffer> swapChainFramebuffers_;
+    GLFWwindow*                  window_;
+    VkInstance                   instance_;
+    VkDebugUtilsMessengerEXT     debugMessenger_;
+    VkSurfaceKHR                 surface_;
+    VkPhysicalDevice             physicalDevice_ = VK_NULL_HANDLE;
+    VkDevice                     device_;
+    VkQueue                      graphicsQueue_, presentQueue_;
+    VkSwapchainKHR               swapChain_;
+    std::vector<VkImage>         swapChainImages_;
+    VkFormat                     swapChainImageFormat_;
+    VkExtent2D                   swapChainExtent_;
+    std::vector<VkImageView>     swapChainImageViews_;
+    VkRenderPass                 renderPass_;
+    VkPipelineLayout             pipelineLayout_;
+    VkPipeline                   graphicsPipeline_;
+    std::vector<VkFramebuffer>   swapChainFramebuffers_;
+    VkCommandPool                commandPool_;
+    std::vector<VkCommandBuffer> commandBuffers_;
 
 public:
     void run() {
@@ -74,6 +76,8 @@ private:
         createRenderPass();
         createGraphicsPipeline();
         createFrameBuffers();
+        createCommandPool();
+        createCommandBuffers();
     }
 
     void mainLoop() {
@@ -95,6 +99,7 @@ private:
             vkDestroyFramebuffer(device_, framebuffer, nullptr);
         }
 
+        vkDestroyCommandPool(device_, commandPool_, nullptr);
         vkDestroyRenderPass(device_, renderPass_, nullptr);
         vkDestroyPipeline(device_, graphicsPipeline_, nullptr);
         vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
@@ -510,6 +515,57 @@ private:
 
             VK_SAFE(vkCreateFramebuffer(
                 device_, &framebufferInfo, nullptr, &swapChainFramebuffers_[i]));
+        }
+    }
+
+    void createCommandPool() {
+        QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice_);
+
+        VkCommandPoolCreateInfo poolInfo {};
+        poolInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+        poolInfo.flags            = 0; // Optional
+
+        VK_SAFE(vkCreateCommandPool(device_, &poolInfo, nullptr, &commandPool_));
+    }
+
+    void createCommandBuffers() {
+        commandBuffers_.resize(swapChainFramebuffers_.size());
+
+        VkCommandBufferAllocateInfo allocInfo {};
+        allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool        = commandPool_;
+        allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = (uint32_t)commandBuffers_.size();
+
+        VK_SAFE(vkAllocateCommandBuffers(device_, &allocInfo, commandBuffers_.data()));
+
+        for (std::size_t i = 0; i < commandBuffers_.size(); ++i) {
+            VkCommandBufferBeginInfo beginInfo {};
+            beginInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            beginInfo.flags            = 0;
+            beginInfo.pInheritanceInfo = nullptr;
+
+            VK_SAFE(vkBeginCommandBuffer(commandBuffers_[i], &beginInfo));
+
+            VkClearValue          clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+            VkRenderPassBeginInfo renderPassInfo {};
+            renderPassInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            renderPassInfo.renderPass        = renderPass_;
+            renderPassInfo.framebuffer       = swapChainFramebuffers_[i];
+            renderPassInfo.renderArea.offset = { 0, 0 };
+            renderPassInfo.renderArea.extent = swapChainExtent_;
+            renderPassInfo.clearValueCount   = 1;
+            renderPassInfo.pClearValues      = &clearColor;
+
+            vkCmdBeginRenderPass(commandBuffers_[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBindPipeline(
+                commandBuffers_[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline_);
+
+            vkCmdDraw(commandBuffers_[i], 3, 1, 0, 0);
+
+            vkCmdEndRenderPass(commandBuffers_[i]);
+            VK_SAFE(vkEndCommandBuffer(commandBuffers_[i]));
         }
     }
 

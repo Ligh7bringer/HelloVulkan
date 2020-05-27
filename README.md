@@ -7,3 +7,7 @@
     2. `cmake -GNinja ..`
 1. Compile the executable:
     1. `cmake --build .`
+
+---
+
+![result](img/triangle.png)

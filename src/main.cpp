@@ -19,8 +19,9 @@ const bool enableValidationLayers = false;
 const bool enableValidationLayers = true;
 #endif
 
-const uint32_t WIDTH  = 800;
-const uint32_t HEIGHT = 600;
+const uint32_t WIDTH                 = 800;
+const uint32_t HEIGHT                = 600;
+const int      MAX_CONCURRENT_FRAMES = 2;
 
 const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation" };
 const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
@@ -44,7 +45,10 @@ class HelloTriangleApplication {
     std::vector<VkFramebuffer>   swapChainFramebuffers_;
     VkCommandPool                commandPool_;
     std::vector<VkCommandBuffer> commandBuffers_;
-    VkSemaphore                  imageAvailableSemaphore_, renderFinishedSemaphore_;
+    std::vector<VkSemaphore>     imageAvailableSemaphores_, renderFinishedSemaphores_;
+    std::vector<VkFence>         concurrentFences_;
+    std::vector<VkFence>         concurrentImages_;
+    std::size_t                  currentFrame_ { 0 };
 
 public:
     void run() {
@@ -79,7 +83,7 @@ private:
         createFrameBuffers();
         createCommandPool();
         createCommandBuffers();
-        createSemaphores();
+        createSyncPrimitives();
     }
 
     void mainLoop() {
@@ -92,12 +96,23 @@ private:
     }
 
     void drawFrame() {
+        vkWaitForFences(device_, 1, &concurrentFences_[currentFrame_], VK_TRUE, UINT64_MAX);
+
         uint32_t imageIndex;
         vkAcquireNextImageKHR(
-            device_, swapChain_, UINT64_MAX, imageAvailableSemaphore_, VK_NULL_HANDLE, &imageIndex);
+            device_, swapChain_, UINT64_MAX, imageAvailableSemaphores_[currentFrame_],
+            VK_NULL_HANDLE, &imageIndex);
 
-        VkSemaphore          waitSemaphores[]   = { imageAvailableSemaphore_ };
-        VkSemaphore          signalSemaphores[] = { renderFinishedSemaphore_ };
+        // If a previous frame is using this image
+        if (concurrentImages_[imageIndex] != VK_NULL_HANDLE) {
+            // Wait for it to finish
+            vkWaitForFences(device_, 1, &concurrentImages_[imageIndex], VK_TRUE, UINT64_MAX);
+        }
+        // Mark this image as used by the current frame
+        concurrentImages_[imageIndex] = concurrentFences_[currentFrame_];
+
+        VkSemaphore          waitSemaphores[]   = { imageAvailableSemaphores_[currentFrame_] };
+        VkSemaphore          signalSemaphores[] = { renderFinishedSemaphores_[currentFrame_] };
         VkPipelineStageFlags waitStages[] { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
         VkSubmitInfo submitInfo {};
@@ -110,7 +125,9 @@ private:
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores    = signalSemaphores;
 
-        VK_SAFE(vkQueueSubmit(graphicsQueue_, 1, &submitInfo, VK_NULL_HANDLE));
+        vkResetFences(device_, 1, &concurrentFences_[currentFrame_]);
+
+        VK_SAFE(vkQueueSubmit(graphicsQueue_, 1, &submitInfo, concurrentFences_[currentFrame_]));
 
         VkSwapchainKHR   swapChains[] = { swapChain_ };
         VkPresentInfoKHR presentInfo {};
@@ -122,7 +139,8 @@ private:
         presentInfo.pImageIndices      = &imageIndex;
 
         vkQueuePresentKHR(presentQueue_, &presentInfo);
-        vkQueueWaitIdle(presentQueue_);
+
+        currentFrame_ = (currentFrame_ + 1) % MAX_CONCURRENT_FRAMES;
     }
 
     void cleanup() {
@@ -138,8 +156,12 @@ private:
             vkDestroyFramebuffer(device_, framebuffer, nullptr);
         }
 
-        vkDestroySemaphore(device_, renderFinishedSemaphore_, nullptr);
-        vkDestroySemaphore(device_, imageAvailableSemaphore_, nullptr);
+        for (std::size_t i = 0; i < MAX_CONCURRENT_FRAMES; ++i) {
+            vkDestroyFence(device_, concurrentFences_[i], nullptr);
+            vkDestroySemaphore(device_, renderFinishedSemaphores_[i], nullptr);
+            vkDestroySemaphore(device_, imageAvailableSemaphores_[i], nullptr);
+        }
+
         vkDestroyCommandPool(device_, commandPool_, nullptr);
         vkDestroyRenderPass(device_, renderPass_, nullptr);
         vkDestroyPipeline(device_, graphicsPipeline_, nullptr);
@@ -620,12 +642,26 @@ private:
         }
     }
 
-    void createSemaphores() {
+    void createSyncPrimitives() {
+        imageAvailableSemaphores_.resize(MAX_CONCURRENT_FRAMES);
+        renderFinishedSemaphores_.resize(MAX_CONCURRENT_FRAMES);
+        concurrentFences_.resize(MAX_CONCURRENT_FRAMES);
+        concurrentImages_.resize(swapChainImages_.size(), VK_NULL_HANDLE);
+
         VkSemaphoreCreateInfo semaphoreInfo {};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-        VK_SAFE(vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &imageAvailableSemaphore_));
-        VK_SAFE(vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &renderFinishedSemaphore_));
+        VkFenceCreateInfo fenceInfo {};
+        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+        for (std::size_t i = 0; i < MAX_CONCURRENT_FRAMES; ++i) {
+            VK_SAFE(
+                vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &imageAvailableSemaphores_[i]));
+            VK_SAFE(
+                vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &renderFinishedSemaphores_[i]));
+            VK_SAFE(vkCreateFence(device_, &fenceInfo, nullptr, &concurrentFences_[i]));
+        }
     }
 
     /*---------------- Helper functions ----------------*/

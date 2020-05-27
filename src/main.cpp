@@ -44,6 +44,7 @@ class HelloTriangleApplication {
     std::vector<VkFramebuffer>   swapChainFramebuffers_;
     VkCommandPool                commandPool_;
     std::vector<VkCommandBuffer> commandBuffers_;
+    VkSemaphore                  imageAvailableSemaphore_, renderFinishedSemaphore_;
 
 public:
     void run() {
@@ -78,13 +79,17 @@ private:
         createFrameBuffers();
         createCommandPool();
         createCommandBuffers();
+        createSemaphores();
     }
 
     void mainLoop() {
         while (!glfwWindowShouldClose(window_)) {
             glfwPollEvents();
+            drawFrame();
         }
     }
+
+    void drawFrame() { }
 
     void cleanup() {
         if (enableValidationLayers) {
@@ -99,6 +104,8 @@ private:
             vkDestroyFramebuffer(device_, framebuffer, nullptr);
         }
 
+        vkDestroySemaphore(device_, renderFinishedSemaphore_, nullptr);
+        vkDestroySemaphore(device_, imageAvailableSemaphore_, nullptr);
         vkDestroyCommandPool(device_, commandPool_, nullptr);
         vkDestroyRenderPass(device_, renderPass_, nullptr);
         vkDestroyPipeline(device_, graphicsPipeline_, nullptr);
@@ -567,6 +574,14 @@ private:
             vkCmdEndRenderPass(commandBuffers_[i]);
             VK_SAFE(vkEndCommandBuffer(commandBuffers_[i]));
         }
+    }
+
+    void createSemaphores() {
+        VkSemaphoreCreateInfo semaphoreInfo {};
+        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+        VK_SAFE(vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &imageAvailableSemaphore_));
+        VK_SAFE(vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &renderFinishedSemaphore_));
     }
 
     /*---------------- Helper functions ----------------*/

@@ -87,9 +87,43 @@ private:
             glfwPollEvents();
             drawFrame();
         }
+
+        vkDeviceWaitIdle(device_);
     }
 
-    void drawFrame() { }
+    void drawFrame() {
+        uint32_t imageIndex;
+        vkAcquireNextImageKHR(
+            device_, swapChain_, UINT64_MAX, imageAvailableSemaphore_, VK_NULL_HANDLE, &imageIndex);
+
+        VkSemaphore          waitSemaphores[]   = { imageAvailableSemaphore_ };
+        VkSemaphore          signalSemaphores[] = { renderFinishedSemaphore_ };
+        VkPipelineStageFlags waitStages[] { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+
+        VkSubmitInfo submitInfo {};
+        submitInfo.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.waitSemaphoreCount   = 1;
+        submitInfo.pWaitSemaphores      = waitSemaphores;
+        submitInfo.pWaitDstStageMask    = waitStages;
+        submitInfo.commandBufferCount   = 1;
+        submitInfo.pCommandBuffers      = &commandBuffers_[imageIndex];
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores    = signalSemaphores;
+
+        VK_SAFE(vkQueueSubmit(graphicsQueue_, 1, &submitInfo, VK_NULL_HANDLE));
+
+        VkSwapchainKHR   swapChains[] = { swapChain_ };
+        VkPresentInfoKHR presentInfo {};
+        presentInfo.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores    = signalSemaphores;
+        presentInfo.swapchainCount     = 1;
+        presentInfo.pSwapchains        = swapChains;
+        presentInfo.pImageIndices      = &imageIndex;
+
+        vkQueuePresentKHR(presentQueue_, &presentInfo);
+        vkQueueWaitIdle(presentQueue_);
+    }
 
     void cleanup() {
         if (enableValidationLayers) {
@@ -351,12 +385,22 @@ private:
         // layout(location = 0) out vec4 outColor
         subpass.pColorAttachments = &colorAttachmentRef;
 
+        VkSubpassDependency dependency {};
+        dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass    = 0;
+        dependency.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcAccessMask = 0;
+        dependency.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
         VkRenderPassCreateInfo renderPassInfo {};
         renderPassInfo.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = 1;
         renderPassInfo.pAttachments    = &colorAttachment;
         renderPassInfo.subpassCount    = 1;
         renderPassInfo.pSubpasses      = &subpass;
+        renderPassInfo.dependencyCount = 1;
+        renderPassInfo.pDependencies   = &dependency;
 
         VK_SAFE(vkCreateRenderPass(device_, &renderPassInfo, nullptr, &renderPass_));
     }
@@ -517,7 +561,7 @@ private:
             framebufferInfo.attachmentCount = 1;
             framebufferInfo.pAttachments    = attachments;
             framebufferInfo.width           = swapChainExtent_.width;
-            framebufferInfo.height          = framebufferInfo.height;
+            framebufferInfo.height          = swapChainExtent_.height;
             framebufferInfo.layers          = 1;
 
             VK_SAFE(vkCreateFramebuffer(

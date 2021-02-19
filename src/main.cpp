@@ -1,8 +1,5 @@
-#include "util.hpp"
-
-#include <GLFW/glfw3.h>
-
 #include <algorithm>
+#include <array>
 #include <cstdint> // UINT32_MAX
 #include <cstdlib>
 #include <cstring>
@@ -12,6 +9,11 @@
 #include <set>
 #include <stdexcept>
 #include <vector>
+
+#include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
+
+#include "util.hpp"
 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
@@ -25,6 +27,38 @@ const int      MAX_CONCURRENT_FRAMES = 2;
 
 const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation" };
 const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+
+struct Vertex {
+    glm::vec2 pos;
+    glm::vec3 color;
+
+    static VkVertexInputBindingDescription getBindingDescription() {
+        VkVertexInputBindingDescription bindingDescription {};
+        bindingDescription.binding   = 0;
+        bindingDescription.stride    = sizeof(Vertex);
+        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+        return bindingDescription;
+    }
+
+    static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
+        std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions {};
+        attributeDescriptions[0].binding  = 0;
+        attributeDescriptions[0].location = 0;
+        attributeDescriptions[0].format   = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[0].offset   = offsetof(Vertex, pos);
+        attributeDescriptions[1].binding  = 0;
+        attributeDescriptions[1].location = 1;
+        attributeDescriptions[1].format   = VK_FORMAT_R32G32B32_SFLOAT;
+        attributeDescriptions[1].offset   = offsetof(Vertex, color);
+
+        return attributeDescriptions;
+    }
+};
+
+static const std::vector<Vertex> vertices = { { { 0.0f, -0.5f }, { 1.0f, 1.0f, 1.0f } },
+                                              { { 0.5f, 0.5f }, { 0.0f, 1.0f, 0.0f } },
+                                              { { -0.5f, 0.5f }, { 0.0f, 0.0f, 1.0f } } };
 
 class HelloTriangleApplication {
     GLFWwindow*                  window_;
@@ -50,6 +84,8 @@ class HelloTriangleApplication {
     std::vector<VkFence>         concurrentImages_;
     std::size_t                  currentFrame_ { 0 };
     bool                         framebufferResized_ { false };
+    VkBuffer                     vertexBuffer_;
+    VkDeviceMemory               vertexBufferMemory_;
 
 public:
     void run() {
@@ -90,6 +126,7 @@ private:
         createGraphicsPipeline();
         createFramebuffers();
         createCommandPool();
+        createVertexBuffer();
         createCommandBuffers();
         createSyncPrimitives();
     }
@@ -101,6 +138,49 @@ private:
         }
 
         vkDeviceWaitIdle(device_);
+    }
+
+    void createVertexBuffer() {
+        VkBufferCreateInfo bufferInfo {};
+        bufferInfo.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size        = sizeof(vertices[0]) * vertices.size();
+        bufferInfo.usage       = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        // bufferInfo.flags = 0;
+
+        VK_SAFE(vkCreateBuffer(device_, &bufferInfo, nullptr, &vertexBuffer_));
+
+        VkMemoryRequirements memRequirements;
+        vkGetBufferMemoryRequirements(device_, vertexBuffer_, &memRequirements);
+
+        VkMemoryAllocateInfo allocInfo {};
+        allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize  = memRequirements.size;
+        allocInfo.memoryTypeIndex = findMemoryType(
+            memRequirements.memoryTypeBits,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+        VK_SAFE(vkAllocateMemory(device_, &allocInfo, nullptr, &vertexBufferMemory_));
+        VK_SAFE(vkBindBufferMemory(device_, vertexBuffer_, vertexBufferMemory_, 0));
+
+        void* data;
+        VK_SAFE(vkMapMemory(device_, vertexBufferMemory_, 0, bufferInfo.size, 0, &data));
+        memcpy(data, vertices.data(), bufferInfo.size);
+        vkUnmapMemory(device_, vertexBufferMemory_);
+    }
+
+    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+        VkPhysicalDeviceMemoryProperties memProperties;
+        vkGetPhysicalDeviceMemoryProperties(physicalDevice_, &memProperties);
+
+        for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
+            if ((typeFilter & (1 << i))
+                && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+                return i;
+            }
+        }
+
+        throw std::runtime_error("failed to find suitable memory type!");
     }
 
     void drawFrame() {
@@ -209,6 +289,9 @@ private:
 
     void cleanup() {
         cleanupSwapChain();
+
+        vkDestroyBuffer(device_, vertexBuffer_, nullptr);
+        vkFreeMemory(device_, vertexBufferMemory_, nullptr);
 
         for (size_t i = 0; i < MAX_CONCURRENT_FRAMES; i++) {
             vkDestroySemaphore(device_, renderFinishedSemaphores_[i], nullptr);
@@ -508,12 +591,15 @@ private:
         VkPipelineShaderStageCreateInfo shaderStages[]
             = { vertShaderStageInfo, fragShaderStageInfo };
 
+        auto bindingDescription    = Vertex::getBindingDescription();
+        auto attributeDescriptions = Vertex::getAttributeDescriptions();
         VkPipelineVertexInputStateCreateInfo vertexInputInfo {};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vertexInputInfo.vertexBindingDescriptionCount   = 0;
-        vertexInputInfo.pVertexBindingDescriptions      = nullptr; // Optional
-        vertexInputInfo.vertexAttributeDescriptionCount = 0;
-        vertexInputInfo.pVertexAttributeDescriptions    = nullptr; // Optional
+        vertexInputInfo.vertexBindingDescriptionCount = 1;
+        vertexInputInfo.pVertexBindingDescriptions    = &bindingDescription;
+        vertexInputInfo.vertexAttributeDescriptionCount
+            = static_cast<uint32_t>(attributeDescriptions.size());
+        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data(); // Optional
 
         // Setup geometry kind & and primitive restart
         VkPipelineInputAssemblyStateCreateInfo inputAssembly {};
@@ -692,7 +778,11 @@ private:
             vkCmdBindPipeline(
                 commandBuffers_[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline_);
 
-            vkCmdDraw(commandBuffers_[i], 3, 1, 0, 0);
+            VkBuffer     vertexBuffers[] = { vertexBuffer_ };
+            VkDeviceSize offsets[]       = { 0 };
+            vkCmdBindVertexBuffers(commandBuffers_[i], 0, 1, vertexBuffers, offsets);
+
+            vkCmdDraw(commandBuffers_[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 
             vkCmdEndRenderPass(commandBuffers_[i]);
             VK_SAFE(vkEndCommandBuffer(commandBuffers_[i]));

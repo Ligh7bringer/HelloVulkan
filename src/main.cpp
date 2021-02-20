@@ -12,8 +12,10 @@
 
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
+#include <vulkan/vulkan.h>
 
 #include "util.hpp"
+#include "vertex.hpp"
 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
@@ -28,40 +30,12 @@ const int      MAX_CONCURRENT_FRAMES = 2;
 const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
 const std::vector<const char *> deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
-struct Vertex
-{
-	glm::vec2 pos;
-	glm::vec3 color;
+static const std::vector<Vertex> vertices = {{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+                                             {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+                                             {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+                                             {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}};
 
-	static VkVertexInputBindingDescription getBindingDescription()
-	{
-		VkVertexInputBindingDescription bindingDescription{};
-		bindingDescription.binding   = 0;
-		bindingDescription.stride    = sizeof(Vertex);
-		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-		return bindingDescription;
-	}
-
-	static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions()
-	{
-		std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
-		attributeDescriptions[0].binding  = 0;
-		attributeDescriptions[0].location = 0;
-		attributeDescriptions[0].format   = VK_FORMAT_R32G32_SFLOAT;
-		attributeDescriptions[0].offset   = offsetof(Vertex, pos);
-		attributeDescriptions[1].binding  = 0;
-		attributeDescriptions[1].location = 1;
-		attributeDescriptions[1].format   = VK_FORMAT_R32G32B32_SFLOAT;
-		attributeDescriptions[1].offset   = offsetof(Vertex, color);
-
-		return attributeDescriptions;
-	}
-};
-
-static const std::vector<Vertex> vertices = {{{0.0f, -0.5f}, {1.0f, 1.0f, 1.0f}},
-                                             {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-                                             {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}};
+static const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
 
 class HelloTriangleApplication
 {
@@ -88,8 +62,8 @@ class HelloTriangleApplication
 	std::vector<VkFence>         concurrentImages_;
 	size_t                       currentFrame_{0};
 	bool                         framebufferResized_{false};
-	VkBuffer                     vertexBuffer_;
-	VkDeviceMemory               vertexBufferMemory_;
+	VkBuffer                     vertexBuffer_, indexBuffer_;
+	VkDeviceMemory               vertexBufferMemory_, indexBufferMemory_;
 
   public:
 	void run()
@@ -135,6 +109,7 @@ class HelloTriangleApplication
 		createFramebuffers();
 		createCommandPool();
 		createVertexBuffer();
+		createIndexBuffer();
 		createCommandBuffers();
 		createSyncPrimitives();
 	}
@@ -150,13 +125,14 @@ class HelloTriangleApplication
 		vkDeviceWaitIdle(device_);
 	}
 
-	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
-	                  VkBuffer &buffer, VkDeviceMemory &bufferMemory)
+	void allocateBuffer(VkDeviceSize size, VkBufferUsageFlags usageFlags,
+	                    VkMemoryPropertyFlags properties, VkBuffer &buffer,
+	                    VkDeviceMemory &bufferMemory)
 	{
 		VkBufferCreateInfo bufferInfo{};
 		bufferInfo.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		bufferInfo.size        = size;
-		bufferInfo.usage       = usage;
+		bufferInfo.usage       = usageFlags;
 		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		// bufferInfo.flags = 0;
 
@@ -176,24 +152,37 @@ class HelloTriangleApplication
 
 	void createVertexBuffer()
 	{
-		VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+		initialiseBuffer(vertices, vertexBuffer_, vertexBufferMemory_,
+		                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+	}
+
+	void createIndexBuffer()
+	{
+		initialiseBuffer(indices, indexBuffer_, indexBufferMemory_,
+		                 VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+	}
+
+	template <typename DataTy>
+	void initialiseBuffer(const std::vector<DataTy> &data, VkBuffer &buffer,
+	                      VkDeviceMemory &bufferMemory, VkBufferUsageFlags usageFlags)
+	{
+		const VkDeviceSize bufferSize = sizeOfVectorBytes(vertices);
 
 		// Temporary buffer to copy the data to a local memory vertex buffer
 		VkBuffer       stagingBuffer;
 		VkDeviceMemory stagingBufferMemory;
-		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-		             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		             stagingBuffer, stagingBufferMemory);
+		allocateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		               stagingBuffer, stagingBufferMemory);
 
-		void *data;
-		VK_SAFE(vkMapMemory(device_, stagingBufferMemory, 0, bufferSize, 0, &data));
-		memcpy(data, vertices.data(), static_cast<size_t>(bufferSize));
+		void *mappedData;
+		VK_SAFE(vkMapMemory(device_, stagingBufferMemory, 0, bufferSize, 0, &mappedData));
+		memcpy(mappedData, data.data(), static_cast<size_t>(bufferSize));
 		vkUnmapMemory(device_, stagingBufferMemory);
 
-		createBuffer(bufferSize,
-		             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-		             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer_, vertexBufferMemory_);
-		copyBuffer(stagingBuffer, vertexBuffer_, bufferSize);
+		allocateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | usageFlags,
+		               VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, buffer, bufferMemory);
+		copyBuffer(stagingBuffer, buffer, bufferSize);
 
 		vkDestroyBuffer(device_, stagingBuffer, nullptr);
 		vkFreeMemory(device_, stagingBufferMemory, nullptr);
@@ -371,6 +360,9 @@ class HelloTriangleApplication
 	void cleanup()
 	{
 		cleanupSwapChain();
+
+		vkDestroyBuffer(device_, indexBuffer_, nullptr);
+		vkFreeMemory(device_, indexBufferMemory_, nullptr);
 
 		vkDestroyBuffer(device_, vertexBuffer_, nullptr);
 		vkFreeMemory(device_, vertexBufferMemory_, nullptr);
@@ -893,8 +885,9 @@ class HelloTriangleApplication
 			VkBuffer     vertexBuffers[] = {vertexBuffer_};
 			VkDeviceSize offsets[]       = {0};
 			vkCmdBindVertexBuffers(commandBuffers_[i], 0, 1, vertexBuffers, offsets);
+			vkCmdBindIndexBuffer(commandBuffers_[i], indexBuffer_, 0, VK_INDEX_TYPE_UINT16);
 
-			vkCmdDraw(commandBuffers_[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+			vkCmdDrawIndexed(commandBuffers_[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
 			vkCmdEndRenderPass(commandBuffers_[i]);
 			VK_SAFE(vkEndCommandBuffer(commandBuffers_[i]));

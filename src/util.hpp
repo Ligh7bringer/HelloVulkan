@@ -1,12 +1,11 @@
-#ifndef __UTIL_HPP__
-#define __UTIL_HPP__
-
-#include <GLFW/glfw3.h>
+#pragma once
 
 #include <fstream>
 #include <optional>
 #include <stdexcept>
 #include <vector>
+
+#include <GLFW/glfw3.h>
 
 #define VK_SAFE(FUNC)                                         \
 	do                                                        \
@@ -86,4 +85,8 @@ inline std::vector<char> readFile(const std::string &filename)
 	return buffer;
 }
 
-#endif        // __UTIL_HPP__
+template <typename DataTy>
+inline size_t sizeOfVectorBytes(const std::vector<DataTy> &array)
+{
+	return (sizeof(array[0]) * array.size());
+}

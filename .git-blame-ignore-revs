@@ -1,0 +1,5 @@
+# To use this: 
+# git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# clang-format: update config & reformat everything
+b4eb5b4fa38a5df9a5f65a581be630b96349a03e

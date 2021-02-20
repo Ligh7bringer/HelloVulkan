@@ -7,19 +7,15 @@
 
 #include <GLFW/glfw3.h>
 
-#define VK_SAFE(FUNC)                                         \
-	do                                                        \
-	{                                                         \
-		auto err = (FUNC);                                    \
-		if (err != VK_SUCCESS)                                \
-		{                                                     \
-			std::string err_msg("@@@ Vulkan error in file "); \
-			err_msg += __FILE__;                              \
-			err_msg += " on line ";                           \
-			err_msg += std::to_string(__LINE__);              \
-			throw std::runtime_error(err_msg);                \
-		}                                                     \
-	} while (0)
+#define VK_SAFE(FUNC)                                \
+	if ((FUNC) != VK_SUCCESS)                        \
+	{                                                \
+		std::string err_msg("@@@ Vulkan error in "); \
+		err_msg += __FILE__;                         \
+		err_msg += ":";                              \
+		err_msg += std::to_string(__LINE__);         \
+		throw std::runtime_error(err_msg);           \
+	}
 
 inline VkResult CreateDebugUtilsMessengerEXT(VkInstance                                instance,
                                              const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,

@@ -3,6 +3,7 @@
 #include <fstream>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include <GLFW/glfw3.h>
@@ -72,7 +73,7 @@ inline std::vector<char> readFile(const std::string &filename)
 		throw std::runtime_error("Failed to open file!");
 	}
 
-	std::size_t       fileSize = (std::size_t) file.tellg();
+	size_t       fileSize = (size_t) file.tellg();
 	std::vector<char> buffer(fileSize);
 	file.seekg(0);
 	file.read(buffer.data(), fileSize);

@@ -8,6 +8,9 @@
 
 #include <GLFW/glfw3.h>
 
+#define SHADER_DIR "assets/shaders/"
+#define TEXTURE_DIR "assets/textures/"
+
 #define VK_SAFE(FUNC)                                \
 	if ((FUNC) != VK_SUCCESS)                        \
 	{                                                \
@@ -73,7 +76,7 @@ inline std::vector<char> readFile(const std::string &filename)
 		throw std::runtime_error("Failed to open file!");
 	}
 
-	size_t       fileSize = (size_t) file.tellg();
+	size_t            fileSize = (size_t) file.tellg();
 	std::vector<char> buffer(fileSize);
 	file.seekg(0);
 	file.read(buffer.data(), fileSize);

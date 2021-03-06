@@ -17,7 +17,7 @@ target_link_libraries(hello_triangle PRIVATE glfw ${Vulkan_LIBRARIES})
 
 target_include_directories(
   hello_triangle PRIVATE ${LIB_DIR}/glm ${LIB_DIR}/GLFW/include
-                         ${Vulkan_INCLUDE_DIRS})
+                         ${LIB_DIR}/stb_image ${Vulkan_INCLUDE_DIRS})
 target_compile_definitions(hello_triangle PRIVATE GLFW_INCLUDE_VULKAN)
 target_compile_features(hello_triangle PRIVATE cxx_std_17)
 

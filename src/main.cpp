@@ -38,10 +38,10 @@ const int      MAX_CONCURRENT_FRAMES = 2;
 const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
 const std::vector<const char *> deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
-static const std::vector<Vertex> vertices = {{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-                                             {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-                                             {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-                                             {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}};
+static const std::vector<Vertex> vertices = {{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+                                             {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+                                             {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+                                             {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}};
 
 static const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
 
@@ -407,31 +407,47 @@ class HelloTriangleApplication
 			bufferInfo.offset = 0;
 			bufferInfo.range  = VK_WHOLE_SIZE;        // sizeof(UniformBufferObject);
 
-			VkWriteDescriptorSet descriptorWrite{};
-			descriptorWrite.sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrite.dstSet           = descriptorSets_[i];
-			descriptorWrite.dstBinding       = 0;
-			descriptorWrite.dstArrayElement  = 0;
-			descriptorWrite.descriptorType   = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			descriptorWrite.descriptorCount  = 1;
-			descriptorWrite.pBufferInfo      = &bufferInfo;
-			descriptorWrite.pImageInfo       = nullptr;        // Optional
-			descriptorWrite.pTexelBufferView = nullptr;        // Optional
+			VkDescriptorImageInfo imageInfo{};
+			imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageInfo.imageView   = textureImageView_;
+			imageInfo.sampler     = textureSampler_;
 
-			vkUpdateDescriptorSets(device_, 1, &descriptorWrite, 0, nullptr);
+			std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+			descriptorWrites[0].sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[0].dstSet           = descriptorSets_[i];
+			descriptorWrites[0].dstBinding       = 0;
+			descriptorWrites[0].dstArrayElement  = 0;
+			descriptorWrites[0].descriptorType   = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			descriptorWrites[0].descriptorCount  = 1;
+			descriptorWrites[0].pBufferInfo      = &bufferInfo;
+			descriptorWrites[0].pImageInfo       = nullptr;        // Optional
+			descriptorWrites[0].pTexelBufferView = nullptr;        // Optional
+
+			descriptorWrites[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[1].dstSet          = descriptorSets_[i];
+			descriptorWrites[1].dstBinding      = 1;
+			descriptorWrites[1].dstArrayElement = 0;
+			descriptorWrites[1].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			descriptorWrites[1].descriptorCount = 1;
+			descriptorWrites[1].pImageInfo      = &imageInfo;
+
+			vkUpdateDescriptorSets(device_, static_cast<uint32_t>(descriptorWrites.size()),
+			                       descriptorWrites.data(), 0, nullptr);
 		}
 	}
 
 	void createDescriptorPool()
 	{
-		VkDescriptorPoolSize poolSize{};
-		poolSize.type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		poolSize.descriptorCount = static_cast<uint32_t>(swapChainImages_.size());
+		std::array<VkDescriptorPoolSize, 2> poolSizes{};
+		poolSizes[0].type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		poolSizes[0].descriptorCount = static_cast<uint32_t>(swapChainImages_.size());
+		poolSizes[1].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages_.size());
 
 		VkDescriptorPoolCreateInfo poolInfo{};
 		poolInfo.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		poolInfo.poolSizeCount = 1;
-		poolInfo.pPoolSizes    = &poolSize;
+		poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+		poolInfo.pPoolSizes    = poolSizes.data();
 		poolInfo.maxSets       = static_cast<uint32_t>(swapChainImages_.size());
 
 		VK_SAFE(vkCreateDescriptorPool(device_, &poolInfo, nullptr, &descriptorPool_));
@@ -446,10 +462,20 @@ class HelloTriangleApplication
 		uboLayoutBinding.stageFlags         = VK_SHADER_STAGE_VERTEX_BIT;
 		uboLayoutBinding.pImmutableSamplers = nullptr;
 
+		VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+		samplerLayoutBinding.binding            = 1;
+		samplerLayoutBinding.descriptorCount    = 1;
+		samplerLayoutBinding.descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		samplerLayoutBinding.pImmutableSamplers = nullptr;
+		samplerLayoutBinding.stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboLayoutBinding,
+		                                                        samplerLayoutBinding};
+
 		VkDescriptorSetLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layoutInfo.bindingCount = 1;
-		layoutInfo.pBindings    = &uboLayoutBinding;
+		layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+		layoutInfo.pBindings    = bindings.data();
 
 		VK_SAFE(vkCreateDescriptorSetLayout(device_, &layoutInfo, nullptr, &descriptorSetLayout_));
 	}
@@ -512,7 +538,7 @@ class HelloTriangleApplication
 	void initialiseBuffer(const std::vector<DataTy> &data, VkBuffer &buffer,
 	                      VkDeviceMemory &bufferMemory, VkBufferUsageFlags usageFlags)
 	{
-		const VkDeviceSize bufferSize = sizeOfVectorBytes(vertices);
+		const VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
 		// Temporary buffer to copy the data to a local memory vertex buffer
 		VkBuffer       stagingBuffer;

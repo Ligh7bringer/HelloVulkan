@@ -12,8 +12,13 @@ option(GLFW_BUILD_EXAMPLES OFF)
 option(GLFW_BUILD_TESTS OFF)
 add_subdirectory(${LIB_DIR}/GLFW)
 
+add_library(tiny_obj_loader STATIC
+            ${LIB_DIR}/tiny_obj_loader/tiny_obj_loader.cc)
+target_include_directories(tiny_obj_loader INTERFACE ${LIB_DIR}/tiny_obj_loader)
+
 add_executable(hello_triangle src/main.cpp)
-target_link_libraries(hello_triangle PRIVATE glfw ${Vulkan_LIBRARIES})
+target_link_libraries(hello_triangle PRIVATE glfw ${Vulkan_LIBRARIES}
+                                             tiny_obj_loader)
 
 target_include_directories(
   hello_triangle PRIVATE ${LIB_DIR}/glm ${LIB_DIR}/GLFW/include

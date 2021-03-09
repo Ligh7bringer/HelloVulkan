@@ -10,6 +10,7 @@
 
 #define SHADER_DIR "assets/shaders/"
 #define TEXTURE_DIR "assets/textures/"
+#define MODEL_DIR "assets/models/"
 
 #define VK_SAFE(FUNC)                                \
 	if ((FUNC) != VK_SUCCESS)                        \

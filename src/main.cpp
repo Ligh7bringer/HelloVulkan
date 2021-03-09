@@ -9,6 +9,7 @@
 #include <optional>
 #include <set>
 #include <stdexcept>
+#include <unordered_map>
 #include <vector>
 
 #include <GLFW/glfw3.h>
@@ -20,8 +21,10 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/hash.hpp>
 
 #include "UniformBuffer.hpp"
 #include "Util.hpp"
@@ -40,17 +43,8 @@ const int      MAX_CONCURRENT_FRAMES = 2;
 const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
 const std::vector<const char *> deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
-const std::vector<Vertex> vertices = {{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-                                      {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-                                      {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-                                      {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-
-                                      {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-                                      {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-                                      {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-                                      {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}};
-
-const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
+const std::string MODEL_PATH(MODEL_DIR "viking_room.obj");
+const std::string TEXTURE_PATH(TEXTURE_DIR "viking_room.png");
 
 class HelloTriangleApplication
 {
@@ -88,6 +82,8 @@ class HelloTriangleApplication
 	VkDeviceMemory               textureImageMemory_, depthImageMemory_;
 	VkImageView                  textureImageView_, depthImageView_;
 	VkSampler                    textureSampler_;
+	std::vector<Vertex>          vertices_;
+	std::vector<uint32_t>        indices_;
 
   public:
 	void run()
@@ -137,6 +133,7 @@ class HelloTriangleApplication
 		createTextureImage();
 		createTextureImageView();
 		createTextureSampler();
+		loadModel();
 		createVertexBuffer();
 		createIndexBuffer();
 		createUniformBuffers();
@@ -155,6 +152,50 @@ class HelloTriangleApplication
 		}
 
 		vkDeviceWaitIdle(device_);
+	}
+
+	void loadModel()
+	{
+		tinyobj::attrib_t                attrib;
+		std::vector<tinyobj::shape_t>    shapes;
+		std::vector<tinyobj::material_t> materials;
+		std::string                      warn, err;
+
+		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str()))
+		{
+			throw std::runtime_error(warn + err);
+		}
+
+		std::unordered_map<Vertex, uint32_t> uniqueVertices{};
+
+		for (const auto &shape : shapes)
+		{
+			for (const auto &index : shape.mesh.indices)
+			{
+				Vertex vertex{};
+
+				vertex.pos = {
+				    attrib.vertices[3 * index.vertex_index + 0],
+				    attrib.vertices[3 * index.vertex_index + 1],
+				    attrib.vertices[3 * index.vertex_index + 2],
+				};
+
+				vertex.texCoord = {
+				    attrib.texcoords[2 * index.texcoord_index + 0],
+				    1.f - attrib.texcoords[2 * index.texcoord_index + 1],
+				};
+
+				vertex.color = {1.0f, 1.0f, 1.0f};
+
+				if (uniqueVertices.count(vertex) == 0)
+				{
+					uniqueVertices[vertex] = static_cast<uint32_t>(vertices_.size());
+					vertices_.push_back(vertex);
+				}
+
+				indices_.push_back(uniqueVertices[vertex]);
+			}
+		}
 	}
 
 	bool hasStencilComponent(VkFormat format)
@@ -254,8 +295,8 @@ class HelloTriangleApplication
 	void createTextureImage()
 	{
 		int      texWidth, texHeight, texChannels;
-		stbi_uc *pixels = stbi_load(TEXTURE_DIR "texture.jpg", &texWidth, &texHeight, &texChannels,
-		                            STBI_rgb_alpha);
+		stbi_uc *pixels =
+		    stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 		const VkDeviceSize imageSize = texWidth * texHeight * 4;
 
 		if (!pixels)
@@ -559,13 +600,13 @@ class HelloTriangleApplication
 
 	void createVertexBuffer()
 	{
-		initialiseBuffer(vertices, vertexBuffer_, vertexBufferMemory_,
+		initialiseBuffer(vertices_, vertexBuffer_, vertexBufferMemory_,
 		                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 	}
 
 	void createIndexBuffer()
 	{
-		initialiseBuffer(indices, indexBuffer_, indexBufferMemory_,
+		initialiseBuffer(indices_, indexBuffer_, indexBufferMemory_,
 		                 VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 	}
 
@@ -590,7 +631,7 @@ class HelloTriangleApplication
 	void initialiseBuffer(const std::vector<DataTy> &data, VkBuffer &buffer,
 	                      VkDeviceMemory &bufferMemory, VkBufferUsageFlags usageFlags)
 	{
-		const VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+		const VkDeviceSize bufferSize = sizeof(vertices_[0]) * vertices_.size();
 
 		// Temporary buffer to copy the data to a local memory vertex buffer
 		VkBuffer       stagingBuffer;
@@ -1357,11 +1398,12 @@ class HelloTriangleApplication
 			VkBuffer     vertexBuffers[] = {vertexBuffer_};
 			VkDeviceSize offsets[]       = {0};
 			vkCmdBindVertexBuffers(commandBuffers_[i], 0, 1, vertexBuffers, offsets);
-			vkCmdBindIndexBuffer(commandBuffers_[i], indexBuffer_, 0, VK_INDEX_TYPE_UINT16);
+			vkCmdBindIndexBuffer(commandBuffers_[i], indexBuffer_, 0, VK_INDEX_TYPE_UINT32);
 
 			vkCmdBindDescriptorSets(commandBuffers_[i], VK_PIPELINE_BIND_POINT_GRAPHICS,
 			                        pipelineLayout_, 0, 1, &descriptorSets_[i], 0, nullptr);
-			vkCmdDrawIndexed(commandBuffers_[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+			vkCmdDrawIndexed(commandBuffers_[i], static_cast<uint32_t>(indices_.size()), 1, 0, 0,
+			                 0);
 
 			vkCmdEndRenderPass(commandBuffers_[i]);
 			VK_SAFE(vkEndCommandBuffer(commandBuffers_[i]));
